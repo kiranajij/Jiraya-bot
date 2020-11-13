@@ -3,6 +3,7 @@ from discord.ext import commands
 import json
 from NHentai import NHentai
 import asyncio
+from .token import TOKEN
 
 
 def make_embed(cont:dict):
@@ -21,7 +22,6 @@ def make_embed(cont:dict):
     return embed
 
 nh = NHentai()
-TOKEN = "NzY0MTY2MzY1NTM1Nzk3Mjgw.X4CTYw.w0sP1zzaYRzcusD0ts8yRk3SjcQ"
 def get_prefix(bot, msg):
     with open("prefixes.json", 'r') as fp:
         prefixes = json.load(fp)
