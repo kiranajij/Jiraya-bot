@@ -1,27 +1,10 @@
 import discord
 from discord.ext import commands
 import json
-from NHentai import NHentai
 import asyncio
-from .token import TOKEN
+from discord_token import AUTH_TOKEN
 
 
-def make_embed(cont:dict):
-    embed = discord.Embed(
-        colour=discord.Colour.green(),
-        title=cont['title'],
-        url=f"https://nhentai.net/g/{cont['id']}"
-    )
-    embed.set_thumbnail(url=cont['images'][0])
-    embed.set_image(url=cont['images'][0])
-    embed.add_field(name="ID", value=cont['id'], inline=True)
-    embed.add_field(name="Pages", value=cont['pages'][0], inline=True)
-    embed.add_field(name="Artists", value=", ".join(cont['artists']))
-    embed.add_field(name="Tags", value=", ".join(cont['tags']))
-    embed.add_field(name="Languages", value=", ".join(cont['languages']))
-    return embed
-
-nh = NHentai()
 def get_prefix(bot, msg):
     with open("prefixes.json", 'r') as fp:
         prefixes = json.load(fp)
@@ -33,9 +16,9 @@ def get_prefix(bot, msg):
 intents = discord.Intents.default()
 intents.members = True
 
-bot = commands.Bot(command_prefix=get_prefix, intents=intents)
+bot = commands.Bot(command_prefix="$", intents=intents)
 
-@bot.command()
+@bot.command(enabled=False)
 @commands.is_owner()
 async def setprefix(ctx, pref):
     gid = str(ctx.guild.id)
@@ -70,81 +53,20 @@ async def bigbrain(ctx):
 async def ping(ctx):
     await ctx.send(f"{round(bot.latency*1000)}ms")
 
-@bot.command()
-async def random(ctx):
-    if not ctx.channel.is_nsfw():
-        await ctx.send("Channel is not NSFW", delete_after=5)
-        return
-    await ctx.trigger_typing()
-    rnd = nh.get_random()
-    await ctx.send(rnd['images'][0])
 
 @bot.command()
-async def get(ctx, id: int):
-    if not ctx.channel.is_nsfw():
-        await ctx.send("Channel is not NSFW", delete_after=5)
-        return
-
-    await ctx.trigger_typing()
-    cont = nh._get_doujin(id=str(id))
-    if cont is None:
-        await ctx.send("Not found!")
-        return
-    await ctx.send(embed=make_embed(cont))
-
-@bot.command()
-async def getfull(ctx, id: int):
-    cont = nh._get_doujin(id=str(id))
-    if cont is None:
-        await ctx.send("Not found!")
-        return
-    await ctx.author.send(embed=make_embed(cont))
-    for img in cont['images']:
-        await ctx.author.send(img)
-
-@bot.command()
-async def getpage(ctx, id:int, page: int):
-    if not ctx.channel.is_nsfw():
-        await ctx.send("Channel is not NSFW", delete_after=5)
-        return
-    cont = nh._get_doujin(id=str(id))
-    if cont is None:
-        await ctx.send("Not found!")
-        return
-    await ctx.send(cont['images'][page-1])
-
-@bot.command()
-async def search(ctx, query: str):
-    if not ctx.channel.is_nsfw():
-        await ctx.send("Channel is not NSFW", delete_after=5)
-        return
-
-    await ctx.trigger_typing()
-    conts = nh.search(query=query, sort="popular", page="1")
-
-    msg = ""
-    for i, cont in enumerate(conts['doujins']):
-        if i==10: break
-        msg += f"{i+1}. **{cont['title']}**\n\n"
-    msg += f"{ctx.author.mention} type the number to get, send 'x' to cancel"
-    await ctx.send(msg, delete_after=30)
-
-    def check(msg):
-        return msg.author == ctx.author and (msg.content.isdigit() or msg.content=='x')
-
+async def reload(ctx):
     try:
-        msg = await bot.wait_for('message', check=check, timeout=30)
-        if msg == 'x': return
-        n = int(msg.content)-1
-        item = nh._get_doujin(id=conts['doujins'][n]['id'])
-        await ctx.send(embed=make_embed(item))
+        bot.unload_extension("module")
+        bot.load_extension("module")
+    except:
+        bot.load_extension("module")
+    else:
+        await ctx.send("done", delete_after=10)
 
-    except asyncio.TimeoutError:
-        await ctx.send("No response", delete_after=5)
-    except IndexError:
-        pass
+bot.load_extension("module")
 
-bot.run(TOKEN)
+bot.run(AUTH_TOKEN)
 
 
 
