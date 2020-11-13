@@ -32,7 +32,6 @@ async def setprefix(ctx, pref):
 
     await me.edit(nick=f"({pref}) {me.name}", reason="Amartya bollo korte")
 
-
 @bot.command()
 async def bigbrain(ctx):
 
@@ -52,7 +51,6 @@ async def bigbrain(ctx):
 @bot.command()
 async def ping(ctx):
     await ctx.send(f"{round(bot.latency*1000)}ms")
-
 
 @bot.command()
 async def reload(ctx):
