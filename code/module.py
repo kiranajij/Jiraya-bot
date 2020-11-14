@@ -1,24 +1,29 @@
 # discord specific imports
 import discord
+from discord import Colour
 from discord.ext import commands
 from discord.ext.commands import Context
 
 # other imports
-import logging, asyncio
-from NHentai import NHentai
+import logging, asyncio, random
+import hentai
+from hentai import Hentai, Format, Utils
 
-# custom impors
+# custom imports
 from custom_embeds import ErrorEmbed, SuccessEmbed, WarningEmbed
 
-
 # The code begins here
-logging.basicConfig(level=logging.ERROR,format="[%(levelname)s)]\t%(message)s")
+logging.basicConfig(level=logging.INFO, format="[%(levelname)s]\t%(message)s")
 
-nh = NHentai()
 
 # The cog responsible for the NHentai Integration
 
-class Hentai(commands.Cog):
+class NHentaiCommands(commands.Cog):
+
+    """
+    This is cog that contains all the NHentai related commands
+    """
+
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
@@ -28,23 +33,22 @@ class Hentai(commands.Cog):
         any command in invoked.
         """
         await ctx.channel.trigger_typing()
-    
+
     async def cog_command_error(self, ctx: Context, error: Exception):
-        
+
         """
         This function is responsible for Error Handling. Everytime a commands raises
         an Error, this function gets invoked and sends the Error message to the Channel
         the command was given.
         """
 
-        logging.error(f"{type(error)}:{error}")            # Log the error in the console
-        
+        logging.error(f"{type(error).__name__}:{error}")  # Log the error in the console
+
         if isinstance(error, commands.CheckFailure):
             await ctx.send(embed=ErrorEmbed("Channel is not NSFW"))
             return
 
         await ctx.send(embed=ErrorEmbed(str(error)), delete_after=10)
-    
 
     def cog_check(self, ctx: Context) -> bool:
         """
@@ -61,51 +65,86 @@ class Hentai(commands.Cog):
         id: The id of the hentai manga.
         """
 
-        cont = nh._get_doujin(id=str(id))       # get the doujin 
-        if cont is None:
+        try:
+            hnt = Hentai(id)
+
+        except Exception:
             await ctx.send(
-                embed=ErrorEmbed("Not found!"),
+                embed=ErrorEmbed("Doujin doesn't exist!"),
                 delete_after=10
             )
-            return
-
-        await ctx.send(embed=self.make_embed(cont))
+        else:
+            embed = self.make_embed(hnt)
+            await ctx.send(embed=embed)
 
     @commands.command()
-    async def getfull(self, ctx: Context, id: int):
+    async def getfull(self, ctx: Context, id: int, from_page: int = 1):
         """
 
         Sends you the entire manga as an image page by page.
         Be careful using this.
 
         """
-        cont = nh._get_doujin(id=str(id))       # get the doujin
-        if cont is None:
+
+        if from_page < 1:
+            raise ValueError("Page number must start from 1")
+
+        try:
+            hnt = Hentai(id)
+
+        except Exception:
             await ctx.send(
-                embed=ErrorEmbed("Not found!"),
+                embed=ErrorEmbed("No such Doujin!"),
                 delete_after=10
             )
-            return
-            
-        await ctx.author.send(embed=make_embed(cont))
-        for img in cont['images']:
-            await ctx.author.send(img)
+        else:
+            LIMIT = 10
+            i = 1
+            for page in hnt.pages[from_page-1::]:
+                i += 1
+                await ctx.author.send(page.url)
+                if i > LIMIT:
+                    await ctx.author.send("Enter `n` for next 10 pages!")
+                    try:
+                        await self.bot.wait_for('message',
+                                           timeout=600,
+                                           check=lambda msg: msg.content=='n')
+                        i = 1
+                        continue
+                    except asyncio.TimeoutError:
+                        await ctx.author.send("Timeout!")
+
 
     @commands.command()
-    async def getpage(self, ctx: Context, id:int, page: int):
+    async def getpage(self, ctx: Context, id: int, page: int):
         """
         Returns the image on the given page number.
         Syntax:  ${prefix} getpage <id> <page>
         """
-        cont = nh._get_doujin(id=str(id))
-        if cont is None:
+
+        try:
+            hnt = Hentai(id)
+        except:
             await ctx.send(
-                ErrorEmbed("Not found!"),
+                embed=ErrorEmbed("Not found!"),
                 delete_after=10
             )
+        else:
 
-            return
-        await ctx.send(cont['images'][page-1])
+            embed=discord.Embed(
+                title=hnt.title(Format.Pretty)+f" || page {page}",
+                url=self.hentai_url(hnt),
+                colour=self.get_random_color()
+            )
+            embed.set_image(url=hnt.pages[page-1].url)
+            embed.set_footer(
+                text=f"requested by || {ctx.author.name}({ctx.author.display_name})",
+                icon_url=ctx.author.avatar_url
+            )
+
+            await ctx.send(
+                embed=embed
+            )
 
     @commands.command()
     async def random(self, ctx: Context) -> None:
@@ -114,74 +153,57 @@ class Hentai(commands.Cog):
         Get a random hentai from NHentai.
         """
 
-        rnd = nh.get_random()                       # query a random manga
-        await ctx.send(embed=self.make_embed(rnd))  # send it to the channel
-    
+        hnt = Utils.get_random_hentai()
+        embed = self.make_embed(hnt)
+        await ctx.send(embed=embed)
+
     @commands.command()
     async def search(self, ctx: Context, query: str):
-
-        conts = nh.search(query=query, sort="popular", page="1")
-
-        msg = ""
-        for i, cont in enumerate(conts['doujins']):
-            if i==10: break
-            msg += f"{i+1}. [{cont['title']}](https://nhentai.net/g/{cont['id']}/)\n\n"
-        msg += f"{ctx.author.mention} type the number to get, send 'x' to cancel"
-        
-
-        embed=discord.Embed(
-                title="Here you go",
-                description=msg,
-                colour=discord.Colour.dark_theme()
-        )
-        embed.set_footer(text=f"Requested by || {ctx.author.display_name}",
-                    icon_url=ctx.author.avatar_url,
-        )
-        botmsg = await ctx.send(
-            embed=embed,
-            delete_after=30
-        )
-
-        def check(msg):
-            return msg.author == ctx.author and (msg.content.isdigit() or msg.content=='x')
-
-        try:
-            msg = await self.bot.wait_for('message', check=check, timeout=30)
-            await botmsg.delete()
-            await msg.delete()
-
-            if msg.content == 'x': return
-
-            n = int(msg.content)-1
-            item = nh._get_doujin(id=conts['doujins'][n]['id'])
-            await ctx.send(embed=self.make_embed(item))
-
-        except asyncio.TimeoutError:
-            await ctx.send(embed=WarningEmbed("No Response!"), delete_after=5)
+        pass
 
     @staticmethod
-    def make_embed(cont:dict) -> discord.Embed:
+    def hentai_url(hnt: Hentai) -> str:
+        return f"https://nhentai.net/g/{hnt.id}/"
+
+    @staticmethod
+    def make_embed(hnt: Hentai) -> discord.Embed:
         """
         This class method takes a NHentai manga element and turns it into a 
         discord Embed and returns it
 
         """
 
+        def convert(tag: list) -> str:
+            lst = list(map(lambda x: x.name, tag))
+            return ", ".join(lst)
+
         embed = discord.Embed(
-            colour=discord.Colour.green(),
-            title=cont['title'],
-            url=f"https://nhentai.net/g/{cont['id']}"
+            colour=discord.Colour.red(),
+            title=hnt.title(Format.Pretty),
+            url=f"https://nhentai.net/g/{hnt.id}"
         )
 
-        embed.set_thumbnail(url=cont['images'][0])
-        embed.set_image(url=cont['images'][0])
-        embed.add_field(name="ID", value=cont['id'], inline=True)
-        embed.add_field(name="Pages", value=cont['pages'][0], inline=False)
-        embed.add_field(name="Artists", value=", ".join(cont['artists']), inline=False)
-        embed.add_field(name="Tags", value=", ".join(cont['tags']), inline=False)
-        embed.add_field(name="Languages", value=", ".join(cont['languages']), inline=False)
+        embed.set_thumbnail(
+            url=hnt.thumbnail
+        )
+        embed.set_image(url=hnt.cover)
+
+        embed.description = \
+            f"`id`      :    {hnt.id}\n" + \
+            f"`pages`   :    {hnt.num_pages}\n" + \
+            f"`tags`    :    {convert(hnt.tag)}\n" + \
+            f"`artist`  :    {convert(hnt.artist)}"
+
         return embed
 
+    @staticmethod
+    def get_random_color() -> Colour:
+        colors = [
+            Colour.blurple(), Colour.dark_blue(), Colour.dark_orange(),
+            Colour.dark_magenta(), Colour.teal()
+        ]
+
+        return random.choice(colors)
 
 def setup(bot):
-    bot.add_cog(Hentai(bot))
+    bot.add_cog(NHentaiCommands(bot))
