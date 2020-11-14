@@ -176,10 +176,10 @@ class Hentai(commands.Cog):
         embed.set_thumbnail(url=cont['images'][0])
         embed.set_image(url=cont['images'][0])
         embed.add_field(name="ID", value=cont['id'], inline=True)
-        embed.add_field(name="Pages", value=cont['pages'][0], inline=True)
-        embed.add_field(name="Artists", value=", ".join(cont['artists']))
-        embed.add_field(name="Tags", value=", ".join(cont['tags']))
-        embed.add_field(name="Languages", value=", ".join(cont['languages']))
+        embed.add_field(name="Pages", value=cont['pages'][0], inline=False)
+        embed.add_field(name="Artists", value=", ".join(cont['artists']), inline=False)
+        embed.add_field(name="Tags", value=", ".join(cont['tags']), inline=False)
+        embed.add_field(name="Languages", value=", ".join(cont['languages']), inline=False)
         return embed
 
 
