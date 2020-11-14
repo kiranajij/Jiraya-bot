@@ -12,6 +12,7 @@ from hentai import Hentai, Format, Utils
 # custom imports
 from custom_embeds import ErrorEmbed, SuccessEmbed, WarningEmbed
 
+
 # The code begins here
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s]\t%(message)s")
 
@@ -46,9 +47,13 @@ class NHentaiCommands(commands.Cog):
 
         if isinstance(error, commands.CheckFailure):
             await ctx.send(embed=ErrorEmbed("Channel is not NSFW"))
-            return
 
-        await ctx.send(embed=ErrorEmbed(str(error)), delete_after=10)
+        elif isinstance(error, commands.CommandInvokeError):
+            await ctx.send(
+                embed=ErrorEmbed(str(error)[str(error).find('[')+1::])
+            )
+        else:
+            await ctx.send(embed=ErrorEmbed(str(error)), delete_after=10)
 
     def cog_check(self, ctx: Context) -> bool:
         """
@@ -69,10 +74,8 @@ class NHentaiCommands(commands.Cog):
             hnt = Hentai(id)
 
         except Exception:
-            await ctx.send(
-                embed=ErrorEmbed("Doujin doesn't exist!"),
-                delete_after=10
-            )
+            raise ValueError("[Doujin doesn't exist! Try another one.")
+
         else:
             embed = self.make_embed(hnt)
             await ctx.send(embed=embed)
@@ -93,10 +96,8 @@ class NHentaiCommands(commands.Cog):
             hnt = Hentai(id)
 
         except Exception:
-            await ctx.send(
-                embed=ErrorEmbed("No such Doujin!"),
-                delete_after=10
-            )
+            raise ValueError("No such Douji found!")
+
         else:
             LIMIT = 10
             i = 1
@@ -122,29 +123,23 @@ class NHentaiCommands(commands.Cog):
         Syntax:  ${prefix} getpage <id> <page>
         """
 
+        # This block checks if the asked hentai is a valid hentai
+        if page < 1:
+            raise ValueError("[Page number must be > 1.")
         try:
             hnt = Hentai(id)
         except:
-            await ctx.send(
-                embed=ErrorEmbed("Not found!"),
-                delete_after=10
-            )
+            raise ValueError("[Doujin not found!")
         else:
+            # If the ID is a valid hentai then do these
 
-            embed=discord.Embed(
-                title=hnt.title(Format.Pretty)+f" || page {page}",
-                url=self.hentai_url(hnt),
-                colour=self.get_random_color()
-            )
-            embed.set_image(url=hnt.pages[page-1].url)
-            embed.set_footer(
-                text=f"requested by || {ctx.author.name}({ctx.author.display_name})",
-                icon_url=ctx.author.avatar_url
-            )
+            embed = self.make_page_embed(ctx, hnt, page)
 
             await ctx.send(
                 embed=embed
             )
+
+
 
     @commands.command()
     async def random(self, ctx: Context) -> None:
@@ -178,7 +173,7 @@ class NHentaiCommands(commands.Cog):
             return ", ".join(lst)
 
         embed = discord.Embed(
-            colour=discord.Colour.red(),
+            colour=NHentaiCommands.get_random_color(),
             title=hnt.title(Format.Pretty),
             url=f"https://nhentai.net/g/{hnt.id}"
         )
@@ -197,7 +192,36 @@ class NHentaiCommands(commands.Cog):
         return embed
 
     @staticmethod
+    def make_page_embed(ctx: Context, hnt: Hentai, page: int):
+
+        """
+        This function converts a `getpage` query to a suitable Embed.
+        :raises: ValueError if the page number provided is invalid
+        :param ctx: context
+        :param hnt: the hentai
+        :param page: the desired page number
+        :return: an Embed or Raises an Error
+        """
+
+        if page < 1 or page > hnt.num_pages:
+            raise ValueError(f"[Invalid page **{page}**")
+
+        embed = discord.Embed(
+            title=hnt.title(Format.Pretty) + f" || page {page}",
+            url=self.hentai_url(hnt),
+            colour=self.get_random_color()
+        )
+        embed.set_image(url=hnt.pages[page - 1].url)
+        embed.set_footer(
+            text=f"requested by || {ctx.author.name}({ctx.author.display_name})",
+            icon_url=ctx.author.avatar_url
+        )
+
+        return embed
+
+    @staticmethod
     def get_random_color() -> Colour:
+
         colors = [
             Colour.blurple(), Colour.dark_blue(), Colour.dark_orange(),
             Colour.dark_magenta(), Colour.teal()
