@@ -8,6 +8,7 @@ from discord.ext.commands import Context
 import logging, asyncio, random
 import hentai
 from hentai import Hentai, Format, Utils
+from typing import List
 
 # custom imports
 from custom_embeds import ErrorEmbed, SuccessEmbed, WarningEmbed
@@ -90,15 +91,17 @@ class NHentaiCommands(commands.Cog):
         """
 
         if from_page < 1:
-            raise ValueError("Page number must start from 1")
+            raise ValueError("[Page number must start from 1")
 
         try:
             hnt = Hentai(id)
 
         except Exception:
-            raise ValueError("No such Douji found!")
+            raise ValueError("[No such Douji found!")
 
         else:
+            # TODO: Update this messy looking shit to something good looking using itertools
+
             LIMIT = 10
             i = 1
             for page in hnt.pages[from_page-1::]:
@@ -108,12 +111,13 @@ class NHentaiCommands(commands.Cog):
                     await ctx.author.send("Enter `n` for next 10 pages!")
                     try:
                         await self.bot.wait_for('message',
-                                           timeout=600,
+                                           timeout=60,
                                            check=lambda msg: msg.content=='n')
                         i = 1
                         continue
                     except asyncio.TimeoutError:
                         await ctx.author.send("Timeout!")
+                        return
 
 
     @commands.command()
@@ -129,7 +133,7 @@ class NHentaiCommands(commands.Cog):
         try:
             hnt = Hentai(id)
         except:
-            raise ValueError("[Doujin not found!")
+            raise ValueError(f"page: {page}[Doujin not found!")
         else:
             # If the ID is a valid hentai then do these
 
@@ -153,8 +157,56 @@ class NHentaiCommands(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.command()
-    async def search(self, ctx: Context, query: str):
-        pass
+    async def search(self, ctx: Context, *, query: str):
+        """
+        TODO: Make this function work
+        :param ctx:
+        :param query:
+        :return:
+        """
+        result = Utils.search_by_query(query)
+        embed  = self.process_search_result(result)
+        msg = await ctx.send(embed=embed)
+
+        def check(msg: discord.Message) -> bool:
+            """
+            Check if the function is
+            :param msg:
+            :return:
+                        """
+            if msg.author != ctx.author: return False
+            content = msg.content
+            try:
+                n = int(content)
+                if n < 1 or n > 10: return False
+
+            except Exception:
+                return content == 'x' or False
+            else:
+                return True
+
+        try:
+            response = await self.bot.wait_for('message',
+                                               check=check,
+                                               timeout=30)
+        except asyncio.TimeoutError:
+            await ctx.send(embed=WarningEmbed("OOPS! timeout"),
+                           delete_after=10
+            )
+        else:
+            await msg.delete()
+            content = response.content
+            if content == 'x':
+                await msg.delete()
+                await response.delete()
+                return
+            n = int(content)
+            await response.delete()
+            await ctx.send(
+                embed=self.make_embed(result[n-1])
+            )
+
+
 
     @staticmethod
     def hentai_url(hnt: Hentai) -> str:
@@ -183,12 +235,14 @@ class NHentaiCommands(commands.Cog):
         )
         embed.set_image(url=hnt.cover)
 
-        embed.description = \
+        description = \
             f"`id`      :    {hnt.id}\n" + \
             f"`pages`   :    {hnt.num_pages}\n" + \
-            f"`tags`    :    {convert(hnt.tag)}\n" + \
-            f"`artist`  :    {convert(hnt.artist)}"
+            f"`tags`    :    {convert(hnt.tag)}\n"
 
+        if hnt.artist: description += f"artist   :   {convert(hnt.artist)}"
+
+        embed.description = description
         return embed
 
     @staticmethod
@@ -208,8 +262,8 @@ class NHentaiCommands(commands.Cog):
 
         embed = discord.Embed(
             title=hnt.title(Format.Pretty) + f" || page {page}",
-            url=self.hentai_url(hnt),
-            colour=self.get_random_color()
+            url=NHentaiCommands.hentai_url(hnt)+f"{page}",
+            colour=NHentaiCommands.get_random_color()
         )
         embed.set_image(url=hnt.pages[page - 1].url)
         embed.set_footer(
@@ -222,12 +276,55 @@ class NHentaiCommands(commands.Cog):
     @staticmethod
     def get_random_color() -> Colour:
 
+        """
+        TODO: Add more colors that look good
+        :return:
+        """
+
         colors = [
             Colour.blurple(), Colour.dark_blue(), Colour.dark_orange(),
-            Colour.dark_magenta(), Colour.teal()
+            Colour.dark_magenta(), Colour.teal(), Colour.magenta(),
+            Colour.dark_gold(), Colour.blurple()
         ]
 
         return random.choice(colors)
+
+    @staticmethod
+    def process_search_result(result: List[Hentai]):
+        description = ""
+        for i, hentai in enumerate(result):
+            if i > 9: break
+            description = description + f"{i+1}. {NHentaiCommands.get_url_hidden(hentai)}"+\
+                f"  ({hentai.id})"+\
+                f" | Pages **{hentai.num_pages}**"+\
+                f"| ❤ **{hentai.num_favorites}**\n\n"
+
+        return discord.Embed(description=description)
+
+    @staticmethod
+    def get_url_hidden(hentai: Hentai):
+        return f"[{hentai.title(Format.Pretty)}]({NHentaiCommands.hentai_url(hentai)})"
+
+
+class Helper:
+    @staticmethod
+    def check(ctx: Context, message: discord.Message) -> bool:
+        """
+        Check if the function is
+        :param msg:
+        :return:
+                    """
+        if msg.author != ctx.author: return False
+        content = msg.content
+        try:
+            n = int(content)
+            if n < 1 or n > 10: return False
+
+        except Exception:
+            return content == 'x' or False
+        else:
+            return True
+
 
 def setup(bot):
     bot.add_cog(NHentaiCommands(bot))
